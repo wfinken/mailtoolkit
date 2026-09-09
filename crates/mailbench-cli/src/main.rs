@@ -47,8 +47,8 @@ struct Evaluate {file:PathBuf,#[arg(long)]ip:IpAddr,#[arg(long)]mail_from:String
 #[derive(Clone,Copy,ValueEnum)]enum Mode {Starttls,Implicit,Off}
 impl From<Mode> for TlsMode {fn from(m:Mode)->Self {match m {Mode::Starttls=>Self::Starttls,Mode::Implicit=>Self::Implicit,Mode::Off=>Self::Off}}}
 #[derive(Args)]
-struct Probe {host:String,#[arg(long,value_enum)]tls_mode:Option<Mode>,#[arg(long,default_value="mailbench.local")]ehlo:String,#[arg(long)]no_verify:bool,#[arg(long)]sni:Option<String>,#[arg(long)]source_ip:Option<IpAddr>}
-impl Probe {fn options(&self,timeout:u64)->Result<SmtpOptions> {let (host,port)=smtp::endpoint(&self.host,25)?;Ok(SmtpOptions {host,port,ehlo:self.ehlo.clone(),tls:self.tls_mode.map(Into::into).unwrap_or(if port==465 {TlsMode::Implicit} else {TlsMode::Starttls}),no_verify:self.no_verify,sni:self.sni.clone(),source_ip:self.source_ip,timeout_secs:timeout})}}
+struct Probe {host:String,#[arg(long,value_enum)]tls_mode:Option<Mode>,#[arg(long,default_value="mailbench.local")]ehlo:String,#[arg(long)]no_verify:bool,#[arg(long)]sni:Option<String>,#[arg(long)]source_ip:Option<IpAddr>,#[arg(long)]ca_file:Option<String>}
+impl Probe {fn options(&self,timeout:u64)->Result<SmtpOptions> {let (host,port)=smtp::endpoint(&self.host,25)?;Ok(SmtpOptions {host,port,ehlo:self.ehlo.clone(),tls:self.tls_mode.map(Into::into).unwrap_or(if port==465 {TlsMode::Implicit} else {TlsMode::Starttls}),no_verify:self.no_verify,sni:self.sni.clone(),source_ip:self.source_ip,ca_file:self.ca_file.clone(),timeout_secs:timeout})}}
 #[derive(Args)]
 struct Send {
     #[command(flatten)]probe:Probe,

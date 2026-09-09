@@ -15,11 +15,11 @@ pub enum TlsMode { #[default] Starttls, Implicit, Off }
 #[derive(Debug,Clone,Serialize,Deserialize)]
 pub struct SmtpOptions {
     pub host:String, pub port:u16, pub ehlo:String, pub tls:TlsMode,
-    pub no_verify:bool, pub sni:Option<String>, pub source_ip:Option<IpAddr>,
+    pub no_verify:bool, pub sni:Option<String>, pub source_ip:Option<IpAddr>, pub ca_file:Option<String>,
     pub timeout_secs:u64,
 }
 impl Default for SmtpOptions {
-    fn default()->Self { Self {host:"localhost".into(),port:25,ehlo:"mailbench.local".into(),tls:TlsMode::Starttls,no_verify:false,sni:None,source_ip:None,timeout_secs:10} }
+    fn default()->Self { Self {host:"localhost".into(),port:25,ehlo:"mailbench.local".into(),tls:TlsMode::Starttls,no_verify:false,sni:None,source_ip:None,ca_file:None,timeout_secs:10} }
 }
 #[derive(Debug,Clone,Serialize,Deserialize)]
 pub struct Event {pub elapsed_ms:u64,pub direction:String,pub text:String}
@@ -52,6 +52,7 @@ impl Connection {
         if !stream.buffer().is_empty() {bail!("Unexpected bytes buffered before TLS upgrade");}
         let mut builder=native_tls::TlsConnector::builder();
         builder.min_protocol_version(Some(native_tls::Protocol::Tlsv12));
+        if let Some(path)=&o.ca_file {builder.add_root_certificate(native_tls::Certificate::from_pem(&tokio::fs::read(path).await?)?);}
         builder.danger_accept_invalid_certs(o.no_verify);builder.danger_accept_invalid_hostnames(o.no_verify);
         let tls=tokio_native_tls::TlsConnector::from(builder.build()?).connect(o.sni.as_deref().unwrap_or(&o.host),stream.into_inner()).await?;
         let cert=tls.get_ref().peer_certificate()?.map(|c|c.to_der()).transpose()?;
@@ -96,6 +97,7 @@ async fn connect(o:&SmtpOptions)->Result<TcpStream> {
 pub struct Submission<'a> {pub sender:&'a str,pub recipients:&'a [String],pub message:&'a [u8],pub username:Option<&'a str>,pub password:Option<&'a str>}
 pub async fn run(o:&SmtpOptions,submission:Option<Submission<'_>>)->Finding {
     let target=format!("{}:{}",o.host,o.port);let start=Instant::now();
+    let secrets:Vec<String>=submission.as_ref().and_then(|s|s.password.map(|p|(s.username.unwrap_or(""),p))).map(|(u,p)|vec![p.to_string(),STANDARD.encode(format!("\0{u}\0{p}"))]).unwrap_or_default();
     let mut c=Connection {stream:None,events:vec![],start,tls_info:Value::Null};
     let result=tokio::time::timeout(Duration::from_secs(o.timeout_secs),async {
         single_line(&o.ehlo)?;
@@ -109,7 +111,7 @@ pub async fn run(o:&SmtpOptions,submission:Option<Submission<'_>>)->Finding {
         if code!=250 {bail!("EHLO/HELO failed with {code}");}
         if o.tls==TlsMode::Starttls {
             if !extensions.iter().any(|s|s.get(4..).is_some_and(|v|v.eq_ignore_ascii_case("STARTTLS"))) {bail!("STARTTLS required but not advertised");}
-            let (code,_)=c.command("STARTTLS",false).await?;if code!=220 {bail!("STARTTLS refused with {code}");}
+            let (mut code,_)=c.command("STARTTLS",false).await?;if code!=220 {bail!("STARTTLS refused with {code}");}
             c.upgrade(o).await?;
             (code,extensions)=c.command(&format!("EHLO {}",o.ehlo),false).await?;
             if code!=250 {bail!("Post-TLS EHLO failed with {code}");}
@@ -138,9 +140,11 @@ pub async fn run(o:&SmtpOptions,submission:Option<Submission<'_>>)->Finding {
     }).await;
     let (status,summary,extensions)=match result {
         Ok(Ok(ext))=>(if o.no_verify || o.tls==TlsMode::Off {Status::Warn} else {Status::Pass},"SMTP session completed; submission does not prove sink delivery".into(),json!(ext)),
-        Ok(Err(e))=>(Status::Fail,e.to_string(),Value::Null),
+        Ok(Err(e))=>(if e.downcast_ref::<std::io::Error>().is_some() {Status::Error}else{Status::Fail},e.to_string(),Value::Null),
         Err(e)=>(Status::Error,format!("SMTP session timed out: {e}"),Value::Null)
     };
+    let mut summary=summary;
+    for secret in secrets.iter().filter(|s|!s.is_empty()) {summary=summary.replace(secret,"[REDACTED]");for event in &mut c.events {event.text=event.text.replace(secret,"[REDACTED]");}}
     Finding::new("smtp",&target,status,summary,json!({"extensions":extensions,"transcript":c.events,"tls":c.tls_info,"tls_mode":o.tls,"verification_disabled":o.no_verify})).timed(start)
 }
 pub fn dot_stuff(raw:&[u8])->Vec<u8> {

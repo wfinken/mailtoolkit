@@ -59,7 +59,7 @@ struct WorkspaceView: View {
                     Text(engine.running ? "Running" : "Ready").font(.caption)
                     Spacer()
                     Toggle("Save local history", isOn: $saveHistory).toggleStyle(.checkbox).help("History includes raw infrastructure and message metadata.")
-                    Button("Copy CLI Command") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(engine.command, forType: .string) }.disabled(engine.command.isEmpty())
+                    Button("Copy CLI Command") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(engine.command, forType: .string) }.disabled(engine.command.isEmpty)
                 }.padding(10)
             }
             .navigationTitle(current.rawValue)
@@ -99,7 +99,7 @@ struct WorkspaceView: View {
                 }
                 if current == .send {
                     TextField("Subject", text: $subject).textFieldStyle(.roundedBorder)
-                    TextEditor(text: $bodyText).font(.system(.body, design: .monospaced)).frame(height: 90).border(.separator)
+                    TextEditor(text: $bodyText).font(.system(.body, design: .monospaced)).frame(height: 90).border(Color(nsColor: .separatorColor))
                     HStack {
                         TextField("Username (optional)", text: $username)
                         SecureField("Password", text: $password)

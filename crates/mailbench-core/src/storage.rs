@@ -41,4 +41,4 @@ pub fn sessions()->Result<Vec<Session>> {
 }
 pub fn delete_session(id:&str)->Result<()> {safe_name(id)?;fs::remove_file(root()?.join("sessions").join(format!("{id}.json")))?;Ok(())}
 #[cfg(test)] mod tests {use super::*;#[test]fn blocks_path_escape(){for s in ["../x","/tmp/a","a/b",""] {assert!(safe_name(s).is_err());}assert!(safe_name("customer-a_2").is_ok());}}
-pub fn parse_profile(text:&str)->Result<Profile> {Ok(toml::from_str(text)?)}
+pub fn parse_profile(text:&str)->Result<Profile> {let profile:Profile=toml::from_str(text)?;safe_name(&profile.name)?;if profile.domain.is_empty() {bail!("Profile domain is empty");}if !(1..=300).contains(&profile.smtp.timeout_secs) {bail!("Profile timeout must be 1..300 seconds");}Ok(profile)}

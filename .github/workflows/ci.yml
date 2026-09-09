@@ -17,10 +17,12 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all
       - run: cargo test --workspace
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo build --release -p mailbench
       - run: python3 tests/cli_smoke.py target/release/mailbench
+      - run: python3 tests/smtp_integration.py target/release/mailbench
       - uses: actions/upload-artifact@v4
         with:
           name: mailbench-${{ matrix.os }}
