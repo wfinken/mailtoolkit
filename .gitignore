@@ -1,0 +1,7 @@
+/target/
+/macos/.build/
+/dist/
+.DS_Store
+*.pem
+*.key
+.env

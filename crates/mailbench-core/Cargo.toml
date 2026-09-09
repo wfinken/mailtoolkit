@@ -1,0 +1,25 @@
+[package]
+name = "mailbench-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+hickory-resolver = "0.24"
+mail-auth = "=0.12.1"
+mailparse = "0.15"
+base64 = "0.22"
+rsa = "0.9"
+tokio-native-tls = "0.3"
+native-tls = "0.2"
+x509-parser = "0.16"
+toml = "0.8"
+
+[dev-dependencies]
+tempfile = "3"

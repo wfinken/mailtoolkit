@@ -1,0 +1,12 @@
+[package]
+name = "mailbench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+mailbench-core = { path = "../mailbench-core" }
+anyhow.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+clap = { version = "4", features = ["derive"] }
