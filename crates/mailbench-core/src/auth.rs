@@ -178,9 +178,11 @@ pub fn validate_spf(record: &str) -> Result<()> {
     let mut modifiers = std::collections::BTreeSet::new();
     for term in record.split_whitespace().skip(1) {
         // Unknown modifiers are extensible; unknown mechanisms are not.
-        if let Some((name, value)) = term.split_once('=') {
+        if let Some((name, value)) = term.split_once('=').filter(|(name, _)| !name.contains(':')) {
             if !name.starts_with(|c: char| c.is_ascii_alphabetic())
-                || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+                || !name
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
             {
                 bail!("Invalid SPF modifier name: {name}");
             }
@@ -193,7 +195,11 @@ pub fn validate_spf(record: &str) -> Result<()> {
             continue;
         }
         let mechanism = term.trim_start_matches(['+', '-', '~', '?']);
-        let name = mechanism.split([':', '/']).next().unwrap_or("").to_ascii_lowercase();
+        let name = mechanism
+            .split([':', '/'])
+            .next()
+            .unwrap_or("")
+            .to_ascii_lowercase();
         if !matches!(
             name.as_str(),
             "all" | "include" | "a" | "mx" | "ptr" | "ip4" | "ip6" | "exists"
@@ -201,8 +207,13 @@ pub fn validate_spf(record: &str) -> Result<()> {
             bail!("Unknown SPF mechanism: {name}");
         }
         if matches!(name.as_str(), "ip4" | "ip6") {
-            let value = mechanism.split_once(':').ok_or_else(|| anyhow!("IP mechanism requires an address"))?.1;
-            let (address, prefix) = value.split_once('/').map_or((value, None), |(a, p)| (a, Some(p)));
+            let value = mechanism
+                .split_once(':')
+                .ok_or_else(|| anyhow!("IP mechanism requires an address"))?
+                .1;
+            let (address, prefix) = value
+                .split_once('/')
+                .map_or((value, None), |(a, p)| (a, Some(p)));
             let maximum = if name == "ip4" {
                 address.parse::<std::net::Ipv4Addr>()?;
                 32
@@ -210,7 +221,11 @@ pub fn validate_spf(record: &str) -> Result<()> {
                 address.parse::<std::net::Ipv6Addr>()?;
                 128
             };
-            if prefix.map(str::parse::<u16>).transpose()?.is_some_and(|p| p > maximum) {
+            if prefix
+                .map(str::parse::<u16>)
+                .transpose()?
+                .is_some_and(|p| p > maximum)
+            {
                 bail!("Invalid {name} CIDR length");
             }
         }
@@ -388,6 +403,7 @@ mod tests {
     #[test]
     fn validates_spf_syntax() {
         assert!(validate_spf("v=spf1 ip4:192.0.2.0/24 -all").is_ok());
+        assert!(validate_spf("v=spf1 exists:%{l1r=}.example.com -all").is_ok());
         assert!(validate_spf("v=spf1 unknown-mechanism -all").is_err());
         assert!(validate_spf("v=spf1 ip4:not-an-ip -all").is_err());
         assert!(validate_spf("v=spf1 ip4:192.0.2.1/99 -all").is_err());
