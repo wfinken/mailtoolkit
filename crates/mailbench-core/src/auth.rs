@@ -173,6 +173,25 @@ pub fn validate_dmarc(record: &str) -> Result<BTreeMap<String, String>> {
     }
     Ok(t)
 }
+pub fn validate_spf(record: &str) -> Result<()> {
+    Spf::parse(record.as_bytes())?;
+    for term in record.split_whitespace().skip(1) {
+        // RFC 7208 permits unknown modifiers, but not unknown mechanisms.
+        if term.contains('=') {
+            continue;
+        }
+        let mechanism = term.trim_start_matches(['+', '-', '~', '?']);
+        let name = mechanism.split([':', '/']).next().unwrap_or("");
+        if !matches!(
+            name,
+            "all" | "include" | "a" | "mx" | "ptr" | "ip4" | "ip6" | "exists"
+        ) {
+            bail!("Unknown SPF mechanism: {name}");
+        }
+    }
+    Ok(())
+}
+
 pub async fn spf_record(dns: &Dns, domain: &str) -> Finding {
     let start = Instant::now();
     let records = match dns.txt(domain).await {
@@ -192,7 +211,7 @@ pub async fn spf_record(dns: &Dns, domain: &str) -> Finding {
         )
         .timed(start);
     }
-    if let Err(error) = Spf::parse(spf[0].as_bytes()) {
+    if let Err(error) = validate_spf(spf[0]) {
         return fail("spf.dns", domain, error, json!({"records":records})).timed(start);
     }
     let terms: Vec<_> = spf[0].split_whitespace().skip(1).collect();
@@ -342,9 +361,9 @@ mod tests {
     }
     #[test]
     fn validates_spf_syntax() {
-        assert!(Spf::parse(b"v=spf1 ip4:192.0.2.0/24 -all").is_ok());
-        assert!(Spf::parse(b"v=spf1 unknown-mechanism -all").is_err());
-        assert!(Spf::parse(b"v=spf1 ip4:not-an-ip -all").is_err());
+        assert!(validate_spf("v=spf1 ip4:192.0.2.0/24 -all").is_ok());
+        assert!(validate_spf("v=spf1 unknown-mechanism -all").is_err());
+        assert!(validate_spf("v=spf1 ip4:not-an-ip -all").is_err());
     }
     #[tokio::test]
     async fn unsigned_message_cannot_pass_dkim() {
