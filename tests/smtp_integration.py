@@ -89,9 +89,12 @@ with tempfile.TemporaryDirectory() as directory:
     key, cert = Path(directory) / 'key.pem', Path(directory) / 'cert.pem'
     ca_key, ca = Path(directory) / 'ca-key.pem', Path(directory) / 'ca.pem'
     csr, extensions = Path(directory) / 'server.csr', Path(directory) / 'server.ext'
+    ca_config, server_config = Path(directory) / 'ca.cnf', Path(directory) / 'server.cnf'
+    ca_config.write_text('[req]\ndistinguished_name=dn\nprompt=no\nx509_extensions=ca\n[dn]\nCN=Mailbench Test CA\n[ca]\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\nsubjectKeyIdentifier=hash\n')
+    server_config.write_text('[req]\ndistinguished_name=dn\nprompt=no\n[dn]\nCN=localhost\n')
     extensions.write_text('basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nsubjectAltName=DNS:localhost\n')
-    subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', str(ca_key), '-out', str(ca), '-days', '1', '-subj', '/CN=Mailbench Test CA', '-addext', 'basicConstraints=critical,CA:TRUE', '-addext', 'keyUsage=critical,keyCertSign,cRLSign'], check=True, capture_output=True)
-    subprocess.run(['openssl', 'req', '-new', '-newkey', 'rsa:2048', '-nodes', '-keyout', str(key), '-out', str(csr), '-subj', '/CN=localhost'], check=True, capture_output=True)
+    subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', str(ca_key), '-out', str(ca), '-days', '1', '-config', str(ca_config)], check=True, capture_output=True)
+    subprocess.run(['openssl', 'req', '-new', '-newkey', 'rsa:2048', '-nodes', '-keyout', str(key), '-out', str(csr), '-config', str(server_config)], check=True, capture_output=True)
     subprocess.run(['openssl', 'x509', '-req', '-in', str(csr), '-CA', str(ca), '-CAkey', str(ca_key), '-CAcreateserial', '-out', str(cert), '-days', '1', '-sha256', '-extfile', str(extensions)], check=True, capture_output=True)
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(cert, key)
