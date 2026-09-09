@@ -87,19 +87,26 @@ def run(server, *args, expected=0, password=None):
 
 with tempfile.TemporaryDirectory() as directory:
     key, cert = Path(directory) / 'key.pem', Path(directory) / 'cert.pem'
-    subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', str(key), '-out', str(cert), '-days', '1', '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost'], check=True, capture_output=True)
+    ca_key, ca = Path(directory) / 'ca-key.pem', Path(directory) / 'ca.pem'
+    csr, extensions = Path(directory) / 'server.csr', Path(directory) / 'server.ext'
+    extensions.write_text('basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nsubjectAltName=DNS:localhost\n')
+    subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', str(ca_key), '-out', str(ca), '-days', '1', '-subj', '/CN=Mailbench Test CA', '-addext', 'basicConstraints=critical,CA:TRUE', '-addext', 'keyUsage=critical,keyCertSign,cRLSign'], check=True, capture_output=True)
+    subprocess.run(['openssl', 'req', '-new', '-newkey', 'rsa:2048', '-nodes', '-keyout', str(key), '-out', str(csr), '-subj', '/CN=localhost'], check=True, capture_output=True)
+    subprocess.run(['openssl', 'x509', '-req', '-in', str(csr), '-CA', str(ca), '-CAkey', str(ca_key), '-CAcreateserial', '-out', str(cert), '-days', '1', '-sha256', '-extfile', str(extensions)], check=True, capture_output=True)
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(cert, key)
     s = Server(context=ctx, echo_secret=True)
-    data, text = run(s, 'send', f'localhost:{s.port}', '--ca-file', str(cert), '--from', 'a@example.com', '--to', 'b@example.net', '--username', 'tester', '--password-stdin', password='local-test-secret\n')
+    data, text = run(s, 'send', f'localhost:{s.port}', '--ca-file', str(ca), '--from', 'a@example.com', '--to', 'b@example.net', '--username', 'tester', '--password-stdin', password='local-test-secret\n')
     assert data['findings'][0]['status'] == 'PASS'
     assert 'local-test-secret' not in text
     assert base64.b64encode(b'\0tester\0local-test-secret').decode() not in text
     assert any(line.startswith(b'X-Mailbench-ID:') for line in s.message)
     s = Server(context=ctx)
     run(s, 'tls', f'localhost:{s.port}', expected=1)
+    s = Server(context=ctx)
+    run(s, 'tls', f'localhost:{s.port}', '--ca-file', str(ca), '--sni', 'wrong.example', expected=1)
     s = Server(context=ctx, implicit=True)
-    run(s, 'tls', f'localhost:{s.port}', '--tls-mode', 'implicit', '--ca-file', str(cert))
+    run(s, 'tls', f'localhost:{s.port}', '--tls-mode', 'implicit', '--ca-file', str(ca))
     s = Server(reject=True)
     data, _ = run(s, 'send', f'localhost:{s.port}', '--tls-mode', 'off', '--from', 'a@example.com', '--to', 'b@example.net', expected=1)
     assert not s.message

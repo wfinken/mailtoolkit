@@ -140,7 +140,10 @@ pub fn validate_dmarc(record: &str) -> Result<BTreeMap<String, String>> {
     let t = tags(record)?;
     for name in ["p", "sp"] {
         if (name == "p" || t.contains_key(name))
-            && !matches!(t.get(name).map(String::as_str), Some("none" | "quarantine" | "reject"))
+            && !matches!(
+                t.get(name).map(String::as_str),
+                Some("none" | "quarantine" | "reject")
+            )
         {
             bail!("Invalid or missing {name} policy");
         }
