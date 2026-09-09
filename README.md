@@ -2,7 +2,17 @@
 
 A local-first email infrastructure diagnostic workbench: Rust engine and CLI, with a native SwiftUI macOS interface. Mailbench is the PRD working name and executable; MailToolkit is the repository.
 
-**Status: initial implementation, not a validated release.** Consult [implementation status](docs/IMPLEMENTATION.md) before using findings as an implementation acceptance gate. CI builds Rust on Ubuntu 22.04/24.04 and macOS and compiles the SwiftUI app. There is no telemetry, cloud backend, or automatic report upload.
+**Status: tested initial MVP implementation; the full PRD roadmap is not complete.** [Builds and automated tests pass](docs/VALIDATION.md) on Ubuntu 22.04/24.04 and macOS 14. Consult [implementation status](docs/IMPLEMENTATION.md) for remaining requirements. There is no telemetry, cloud backend, or automatic report upload.
+
+## Downloads
+
+Download development builds from the artifacts section of the [verified CI run](https://github.com/wfinken/mailtoolkit/actions/runs/34416816972):
+
+- `Mailbench-macos-app`: Apple Silicon app ZIP (macOS 14+).
+- `mailbench-macos-14`: standalone Apple Silicon CLI.
+- `mailbench-ubuntu-22.04` and `mailbench-ubuntu-24.04`: x86_64 Linux CLIs.
+
+GitHub may require sign-in to download artifacts. CLI files extracted from Actions archives may need `chmod +x mailbench`. These are development artifacts; the app is locally signed, not Developer ID signed or notarized.
 
 ## Build
 
@@ -25,7 +35,7 @@ bash scripts/build-macos.sh
 open dist/Mailbench.app
 ```
 
-The app bundle contains the Rust engine. For development, `swift run --package-path macos` also works after selecting the engine binary in Settings. The build script signs locally, without notarization. Public distribution requires an Apple signing identity and notarization. Successful CI runs also provide a macOS app ZIP artifact.
+The app bundle contains the Rust engine. For development, `swift run --package-path macos` also works after selecting the engine binary in Settings. The build script signs locally, without notarization. Public distribution requires an Apple signing identity and notarization. Successful CI runs also provide an Apple Silicon (arm64) macOS app ZIP artifact. Intel Mac users can build the app locally with the same script.
 
 ## Common workflows
 
