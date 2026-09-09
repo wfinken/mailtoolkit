@@ -175,18 +175,44 @@ pub fn validate_dmarc(record: &str) -> Result<BTreeMap<String, String>> {
 }
 pub fn validate_spf(record: &str) -> Result<()> {
     Spf::parse(record.as_bytes())?;
+    let mut modifiers = std::collections::BTreeSet::new();
     for term in record.split_whitespace().skip(1) {
-        // RFC 7208 permits unknown modifiers, but not unknown mechanisms.
-        if term.contains('=') {
+        // Unknown modifiers are extensible; unknown mechanisms are not.
+        if let Some((name, value)) = term.split_once('=') {
+            if !name.starts_with(|c: char| c.is_ascii_alphabetic())
+                || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+            {
+                bail!("Invalid SPF modifier name: {name}");
+            }
+            let name = name.to_ascii_lowercase();
+            if matches!(name.as_str(), "redirect" | "exp")
+                && (value.is_empty() || !modifiers.insert(name))
+            {
+                bail!("Empty or duplicate SPF modifier");
+            }
             continue;
         }
         let mechanism = term.trim_start_matches(['+', '-', '~', '?']);
-        let name = mechanism.split([':', '/']).next().unwrap_or("");
+        let name = mechanism.split([':', '/']).next().unwrap_or("").to_ascii_lowercase();
         if !matches!(
-            name,
+            name.as_str(),
             "all" | "include" | "a" | "mx" | "ptr" | "ip4" | "ip6" | "exists"
         ) {
             bail!("Unknown SPF mechanism: {name}");
+        }
+        if matches!(name.as_str(), "ip4" | "ip6") {
+            let value = mechanism.split_once(':').ok_or_else(|| anyhow!("IP mechanism requires an address"))?.1;
+            let (address, prefix) = value.split_once('/').map_or((value, None), |(a, p)| (a, Some(p)));
+            let maximum = if name == "ip4" {
+                address.parse::<std::net::Ipv4Addr>()?;
+                32
+            } else {
+                address.parse::<std::net::Ipv6Addr>()?;
+                128
+            };
+            if prefix.map(str::parse::<u16>).transpose()?.is_some_and(|p| p > maximum) {
+                bail!("Invalid {name} CIDR length");
+            }
         }
     }
     Ok(())
@@ -364,6 +390,8 @@ mod tests {
         assert!(validate_spf("v=spf1 ip4:192.0.2.0/24 -all").is_ok());
         assert!(validate_spf("v=spf1 unknown-mechanism -all").is_err());
         assert!(validate_spf("v=spf1 ip4:not-an-ip -all").is_err());
+        assert!(validate_spf("v=spf1 ip4:192.0.2.1/99 -all").is_err());
+        assert!(validate_spf("v=spf1 redirect=a.example redirect=b.example").is_err());
     }
     #[tokio::test]
     async fn unsigned_message_cannot_pass_dkim() {
