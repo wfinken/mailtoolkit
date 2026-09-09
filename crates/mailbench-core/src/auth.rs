@@ -2,7 +2,7 @@
 use crate::{dns::Dns, Finding, Status};
 use mail_auth::{AuthenticatedMessage, MessageAuthenticator, SpfResult, DkimResult, DmarcResult};
 use anyhow::{anyhow, bail, Result};
-use mail_auth::{spf::SpfParameters, dmarc::DmarcParameters};
+use mail_auth::{spf::verify::SpfParameters, dmarc::verify::DmarcParameters};
 use serde_json::json;
 use std::{collections::BTreeMap, net::IpAddr, time::{Duration, Instant}};
 use base64::{Engine, engine::general_purpose::STANDARD};

@@ -26,6 +26,7 @@ struct WorkspaceView: View {
     @State private var username = ""
     @State private var password = ""
     @State private var useSwaks = false
+    @State private var verifyFile = false
     @State private var saveHistory = false
     @State private var showingPalette = false
     @State private var paletteQuery = ""
@@ -85,9 +86,10 @@ struct WorkspaceView: View {
                 HStack {
                     TextField(targetHint, text: $target).textFieldStyle(.roundedBorder).onSubmit { run() }
                     if current == .dns { Picker("Type", selection: $recordType) { ForEach(["A", "AAAA", "MX", "TXT", "PTR", "CNAME", "NS", "SOA", "SRV", "CAA"], id: \.self) { Text($0) } }.frame(width: 160) }
-                    if current == .message { Button("Open .eml…") { chooseFile { target = $0 } } }
+                    if current == .message || ([.dkim, .dmarc].contains(current) && verifyFile) { Button("Open .eml…") { chooseFile { target = $0 } } }
                     Button(actionLabel) { run() }.keyboardShortcut(.return, modifiers: .command).disabled(engine.running)
                 }
+                if [.dkim, .dmarc].contains(current) { Toggle("Verify received .eml", isOn: $verifyFile).toggleStyle(.checkbox) }
                 if [.environment, .spf, .dkim, .dmarc, .message].contains(current) {
                     HStack { TextField("Sending IP (SPF / DMARC)", text: $ip); TextField("DKIM selector", text: $selector) }.textFieldStyle(.roundedBorder)
                 }
@@ -146,6 +148,18 @@ struct WorkspaceView: View {
                         HStack { Label(f.status, systemImage: f.symbol).font(.headline); Spacer(); Text(f.target).foregroundStyle(.secondary) }
                         Text(f.summary).font(.title3).textSelection(.enabled)
                         ForEach(f.next_steps, id: \.self) { Text($0) }
+                        if !f.evidence["sessions"].items.isEmpty {
+                            ForEach(Array(f.evidence["sessions"].items.enumerated()), id: \.offset) { _, item in
+                                Button { target = item["id"].text; execute(["history", "show", target]) } label: { HStack { Text(item["target"].text); Spacer(); Text(item["timestamp"].text).foregroundStyle(.secondary) } }.buttonStyle(.plain)
+                                Divider()
+                            }
+                        }
+                        if !f.evidence["profiles"].items.isEmpty {
+                            ForEach(Array(f.evidence["profiles"].items.enumerated()), id: \.offset) { _, item in
+                                Button { target = item["name"].text; execute(["check", "--profile", target]) } label: { HStack { Text(item["name"].text); Spacer(); Text(item["domain"].text).foregroundStyle(.secondary) } }.buttonStyle(.plain)
+                                Divider()
+                            }
+                        }
                         if !f.evidence["records"].items.isEmpty {
                             ForEach(Array(f.evidence["records"].items.enumerated()), id: \.offset) { _, row in Text(row.pretty).font(.system(.body, design: .monospaced)).textSelection(.enabled); Divider() }
                         }
@@ -172,8 +186,8 @@ struct WorkspaceView: View {
         case .mx: args = ["mx", target]
         case .ptr: args = ["ptr", target]
         case .spf: args = ip.isEmpty ? ["spf", "check", target] : ["spf", "test", target, "--ip", ip, "--ehlo", ehlo]
-        case .dkim: args = ["dkim", "check", target, "--selector", selector]
-        case .dmarc: args = ["dmarc", "check", target]
+        case .dkim: args = verifyFile ? ["dkim", "verify", target] : ["dkim", "check", target, "--selector", selector]
+        case .dmarc: args = verifyFile ? ["dmarc", "evaluate", target, "--ip", ip, "--mail-from", sender, "--ehlo", ehlo] : ["dmarc", "check", target]
         case .smtp, .tls:
             args = current == .tls ? ["tls", target] : ["smtp", "test", target]
             args += ["--ehlo", ehlo, "--tls-mode", tls]
