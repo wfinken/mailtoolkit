@@ -12,6 +12,7 @@ Install stable Rust (including Cargo). Linux builds require a C toolchain, pkg-c
 cargo build --release -p mailbench
 cargo test --workspace
 python3 tests/cli_smoke.py target/release/mailbench
+mkdir -p ~/.local/bin
 install -m 755 target/release/mailbench ~/.local/bin/mailbench
 ```
 
@@ -24,7 +25,7 @@ bash scripts/build-macos.sh
 open dist/Mailbench.app
 ```
 
-The app bundle contains the Rust engine. For development, `swift run --package-path macos` also works after selecting the engine binary in Settings. The build script signs locally, without notarization. Public distribution requires an Apple signing identity and notarization.
+The app bundle contains the Rust engine. For development, `swift run --package-path macos` also works after selecting the engine binary in Settings. The build script signs locally, without notarization. Public distribution requires an Apple signing identity and notarization. Successful CI runs also provide a macOS app ZIP artifact.
 
 ## Common workflows
 
@@ -46,7 +47,7 @@ mailbench headers received.eml
 cat received.eml | mailbench message inspect -
 ```
 
-`check` sends no mail. SMTP connections occur only with an explicit `--smtp` target or a selected profile. SMTP and TLS default to required STARTTLS, with implicit TLS automatically selected for port 465. `--tls-mode off` and `--no-verify` produce warnings; AUTH is forbidden unless TLS is verified. The timeout bounds the whole SMTP session, not each read.
+`check` sends no mail. SMTP connections occur only with an explicit `--smtp` target or a selected profile. SMTP and TLS default to required STARTTLS, with implicit TLS automatically selected for port 465. `--tls-mode off` and `--no-verify` produce warnings; AUTH is forbidden unless TLS is verified. The timeout bounds the whole SMTP session, not each read. Use `--ca-file /path/to/lab-ca.pem` to trust a specific laboratory CA while retaining hostname verification.
 
 ```sh
 mailbench send smtp.example.com:587 \

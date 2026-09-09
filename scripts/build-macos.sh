@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-cargo build --release -p mailbench
+cargo build --locked --release -p mailbench
 swift build --package-path macos -c release
 app_dir="$PWD/dist/Mailbench.app"
 mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"

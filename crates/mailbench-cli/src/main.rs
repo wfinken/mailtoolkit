@@ -144,10 +144,22 @@ fn toml_profile(path:&PathBuf)->Result<storage::Profile> {storage::parse_profile
 #[tokio::main]
 async fn main() {
     let cli=match Cli::try_parse() {Ok(c)=>c,Err(e)=>{let code=if e.use_stderr(){3}else{0};let _=e.print();std::process::exit(code);}};
-    let result=execute(&cli).await;
+    let result=tokio::select! {
+        result=execute(&cli)=>result,
+        _=stop_signal()=>Ok(Session::new("canceled",vec![Finding::error("canceled","local","Operation canceled; an accepted message cannot be recalled")]))
+    };
     let (session,mut exit)=match result {Ok(s)=>{let code=s.exit_code();(s,code)},Err(e)=>(Session::new("configuration",vec![Finding::error("configuration","local",format!("{e:#}"))]),3)};
-    if cli.save {if let Err(e)=storage::save_session(&session) {eprintln!("Could not save history: {e}");exit=4;}}
+    if cli.save && !matches!(&cli.command,Cmd::History {..}|Cmd::Profile {..}|Cmd::Report {..}|Cmd::Config {..}) {if let Err(e)=storage::save_session(&session) {eprintln!("Could not save history: {e}");exit=4;}}
     if cli.json {println!("{}",serde_json::to_string_pretty(&session).expect("session is serializable"));}
     else if !cli.quiet {println!("MAILBENCH  {}\n",session.target);for f in &session.findings {println!("{:?}\t{}\t{} ({} ms)",f.status,f.test,f.summary,f.duration_ms);for advice in &f.next_steps {println!("  → {advice}");}if cli.verbose>0 || f.status==Status::Info {println!("{}",serde_json::to_string_pretty(&f.evidence).unwrap());}}println!("\nSession: {}",session.id);}
     std::process::exit(exit);
+}
+
+async fn stop_signal() {
+    #[cfg(unix)] {
+        if let Ok(mut term)=tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            tokio::select! { _=tokio::signal::ctrl_c()=>{}, _=term.recv()=>{} }
+        } else { let _=tokio::signal::ctrl_c().await; }
+    }
+    #[cfg(not(unix))] { let _=tokio::signal::ctrl_c().await; }
 }

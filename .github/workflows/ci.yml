@@ -18,7 +18,7 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all
-      - run: cargo generate-lockfile
+      - run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
       - uses: actions/upload-artifact@v4
         if: matrix.os == 'ubuntu-24.04'
         with:
@@ -26,15 +26,25 @@ jobs:
           path: |
             crates/
             Cargo.lock
-      - run: cargo test --workspace
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo build --release -p mailbench
+      - run: cargo test --locked --workspace
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - run: cargo build --locked --release -p mailbench
       - run: python3 tests/cli_smoke.py target/release/mailbench
       - run: python3 tests/smtp_integration.py target/release/mailbench
       - uses: actions/upload-artifact@v4
         with:
           name: mailbench-${{ matrix.os }}
           path: target/release/mailbench
+      - name: Package macOS app
+        if: runner.os == 'macOS'
+        run: |
+          bash scripts/build-macos.sh
+          ditto -c -k --sequesterRsrc --keepParent dist/Mailbench.app dist/Mailbench-macos.zip
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'macOS'
+        with:
+          name: Mailbench-macos-app
+          path: dist/Mailbench-macos.zip
   macos:
     runs-on: macos-14
     steps:

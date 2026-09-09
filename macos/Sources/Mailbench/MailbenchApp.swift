@@ -107,6 +107,7 @@ struct WorkspaceView: View {
                         SecureField("Password", text: $password)
                         Button("Save to Keychain") { do { try Keychain.save(account: target + "/" + username, password: password) } catch { engine.error = error.localizedDescription } }
                         Button("Load") { password = Keychain.load(account: target + "/" + username) ?? "" }
+                        Button("Remove", role: .destructive) { do { try Keychain.delete(account: target + "/" + username); password = "" } catch { engine.error = error.localizedDescription } }
                     }.textFieldStyle(.roundedBorder)
                     HStack { Toggle("Use Swaks", isOn: $useSwaks); Button("Preview without sending") { run(dryRun: true) }; Text("Run sends one message to the specified recipient.").font(.caption).foregroundStyle(.secondary) }
                 }
