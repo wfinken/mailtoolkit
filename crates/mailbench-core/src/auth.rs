@@ -2,6 +2,7 @@
 use crate::{dns::Dns, Finding, Status};
 use anyhow::{anyhow, bail, Result};
 use base64::{engine::general_purpose::STANDARD, Engine};
+use mail_auth::{common::parse::TxtRecordParser, spf::Spf};
 use mail_auth::{dmarc::verify::DmarcParameters, spf::verify::SpfParameters};
 use mail_auth::{AuthenticatedMessage, DkimResult, DmarcResult, MessageAuthenticator, SpfResult};
 use rsa::{
@@ -191,20 +192,23 @@ pub async fn spf_record(dns: &Dns, domain: &str) -> Finding {
         )
         .timed(start);
     }
+    if let Err(error) = Spf::parse(spf[0].as_bytes()) {
+        return fail("spf.dns", domain, error, json!({"records":records})).timed(start);
+    }
     let terms: Vec<_> = spf[0].split_whitespace().skip(1).collect();
     // This is a static inspection, not a fabricated check_host result or recursive lookup count.
     let lookups = terms
         .iter()
         .filter(|s| {
-            ["include:", "a", "mx", "exists:", "ptr", "redirect="]
-                .iter()
-                .any(|prefix| {
-                    s.trim_start_matches(['+', '-', '~', '?'])
-                        .starts_with(prefix)
-                })
+            matches!(
+                s.trim_start_matches(['+', '-', '~', '?'])
+                    .split([':', '/', '='])
+                    .next(),
+                Some("include" | "a" | "mx" | "exists" | "ptr" | "redirect")
+            )
         })
         .count();
-    Finding::new("spf.dns",domain,Status::Info,"SPF record found; use spf test with a sending IP for protocol evaluation",json!({"records":records,"terms":terms,"top_level_dns_terms":lookups,"evaluation":"not performed"})).timed(start)
+    Finding::new("spf.dns",domain,Status::Pass,"SPF syntax is valid; use spf test with a sending IP for authorization evaluation",json!({"records":records,"terms":terms,"top_level_dns_terms":lookups,"evaluation":"not performed"})).timed(start)
 }
 fn spf_status(r: SpfResult) -> Status {
     match r {
@@ -335,6 +339,12 @@ mod tests {
         assert!(validate_dmarc("v=DMARC1;p=reject;p=none").is_err());
         assert!(validate_dmarc("v=DMARC1;p=reject;pct=101").is_err());
         assert!(validate_dmarc("v=DMARC1;p=reject;adkim=s;rua=mailto:reports@example.com").is_ok());
+    }
+    #[test]
+    fn validates_spf_syntax() {
+        assert!(Spf::parse(b"v=spf1 ip4:192.0.2.0/24 -all").is_ok());
+        assert!(Spf::parse(b"v=spf1 unknown-mechanism -all").is_err());
+        assert!(Spf::parse(b"v=spf1 ip4:not-an-ip -all").is_err());
     }
     #[tokio::test]
     async fn unsigned_message_cannot_pass_dkim() {

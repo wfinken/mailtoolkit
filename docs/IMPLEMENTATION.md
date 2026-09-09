@@ -16,7 +16,7 @@ This is an initial source implementation of the PRD, not completion of every mil
 ## Known limitations and required follow-up
 
 1. The authoring environment lacks Rust and Swift. Compilation and automated tests run in GitHub Actions on Ubuntu 22.04, Ubuntu 24.04, and macOS 14. Manual UI testing and full PRD acceptance remain release gates.
-2. SPF `check` is record inspection only. Mechanism-level recursive traces, matched mechanism, accurate DNS budgets, void lookup evidence, and independent syntax-only validation are not implemented. `test` delegates the protocol result to mail-auth.
+2. SPF `check` validates record syntax using the authentication library. Mechanism-level recursive traces, matched mechanism, accurate recursive DNS budgets, and void lookup evidence are not implemented. `test` delegates the protocol result to mail-auth.
 3. Authentication uses the system resolver; custom resolver support is currently restricted to explicit DNS queries. DNS AA flags/raw wire packets and independent DNSSEC validation are unavailable. Negative DNS answers currently surface as ERROR instead of distinguishing NXDOMAIN/NODATA from transport errors.
 4. DKIM verification exposes provider evidence, rather than a structured canonicalization/body-hash inspector. The DNS validator does not yet enforce all optional key tags or cryptographically validate Ed25519 curve points. Signed golden fixtures, tampered-body fixtures, recursion/lookup-limit tests, and domain-alignment fixtures are required.
 5. DMARC exact-domain DNS inspection does not show inherited records or external report authorization. Independent message evaluation is delegated to mail-auth. Distinguish no-policy, temporary DNS failure, and alignment failure more precisely in displayed results.
